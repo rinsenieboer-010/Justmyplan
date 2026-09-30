@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { flushSync } from "react-dom";
 import { supabase } from "./supabase.js";
-import { loadTasks, loadTrash, trashTaskDB, restoreTaskDB, loadEvents, loadLists, addTaskDB, updateTaskDB, deleteTaskDB, addEventDB, updateEventDB, deleteEventDB, addListDB, updateListDB, deleteListDB, updateTaskOrderDB, reorderListsDB, updateListSectionsDB, seedDefaultListsDB, loadAgents, addAgentDB, updateAgentDB, deleteAgentDB, loadShareLists, setShareLists, loadPersonColors, setPersonColorDB, removePersonColorDB } from "./db.js";
+import { loadTasks, loadTrash, trashTaskDB, restoreTaskDB, loadEvents, loadLists, addTaskDB, updateTaskDB, deleteTaskDB, addEventDB, updateEventDB, deleteEventDB, addListDB, updateListDB, deleteListDB, reorderListsDB, seedDefaultListsDB, loadAgents, addAgentDB, updateAgentDB, deleteAgentDB, loadShareLists, setShareLists, loadPersonColors, setPersonColorDB, removePersonColorDB } from "./db.js";
 import { t, LANGUAGES, DAYS_BY_LANG, MONTHS_BY_LANG, MONTHS_SHORT_BY_LANG } from "./i18n.js";
 import { createContext, useContext } from "react";
 const LangContext = createContext('nl');
@@ -400,9 +400,6 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
   const [openNoteId, setOpenNoteId] = useState(null);
   const [noteValue, setNoteValue] = useState("");
   const [titleValue, setTitleValue] = useState("");
-  // Slepen: taken + secties binnen een lijst, en lijsten in de zijbalk
-  const [editingSectionId, setEditingSectionId] = useState(null);
-  const [sectionValue, setSectionValue] = useState("");
 
   // Gedeelde lijst tonen in de kleur van de persoon (zo zie je meteen van wie)
   const listColor = (l) => (l.isShared ? (PERSON_COLORS[personColors[l.ownerEmail]]?.dot || l.color) : l.color);
@@ -455,120 +452,7 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
     frozenPrio[b.id] !== undefined ? frozenPrio[b.id] : b.priority,
   ));
 
-  // Handmatige volgorde: zodra je in een lijst sleept of een sectie toevoegt,
-  // wint jouw volgorde van datum en prioriteit. Taken die nog geen plek hebben
-  // (bijv. net aangemaakt via de assistent) staan automatisch gesorteerd bovenaan.
-  const SECTION_COLORS = ["#2563EB", "#DC2626", "#E6B400"];
-  const activeListObj = lists.find(l => l.id === activeList);
-  const sections = (!isShared && activeListObj?.sections) || [];
-  const isManual = !isShared && (sections.length > 0 || visibleTasks.some(x => x.sortOrder != null));
-  const rows = !isManual
-    ? sorted.map(task => ({ kind: "task", id: task.id, task }))
-    : [
-        ...sorted.filter(x => x.sortOrder == null).map(task => ({ kind: "task", id: task.id, task })),
-        ...[
-          ...visibleTasks.filter(x => x.sortOrder != null).map(task => ({ kind: "task", id: task.id, task, key: task.sortOrder })),
-          ...sections.map(section => ({ kind: "section", id: section.id, section, key: section.sortOrder ?? 0 })),
-        ].sort((a, b) => a.key - b.key),
-      ];
-
-  const saveSections = (secs) => {
-    setLists(l => l.map(x => x.id === activeList ? { ...x, sections: secs } : x));
-    updateListSectionsDB(activeList, secs);
-  };
-
-  // Legt de getoonde volgorde vast: elke rij krijgt zijn index als sort_order
-  const applyOrder = (newRows) => {
-    const changed = [];
-    const secs = [];
-    newRows.forEach((r, i) => {
-      if (r.kind === "section") secs.push({ ...r.section, sortOrder: i });
-      else if (r.task.sortOrder !== i) changed.push({ id: r.id, sortOrder: i });
-    });
-    if (changed.length) {
-      const m = Object.fromEntries(changed.map(c => [c.id, c.sortOrder]));
-      setTasks(ts => ts.map(x => m[x.id] !== undefined ? { ...x, sortOrder: m[x.id] } : x));
-      updateTaskOrderDB(changed);
-    }
-    if (JSON.stringify(secs) !== JSON.stringify(sections)) saveSections(secs);
-  };
-
-  // Handmatige volgorde is een voorkeur, geen wet. Verandert er iets dat de
-  // automatische sortering bepaalt (prioriteit, datum, of een herhalende taak
-  // die je afvinkt), dan hoort die taak weer te bewegen. Hij krijgt dan een
-  // plek tussen de buren waar hij volgens die sortering thuishoort, terwijl de
-  // rest van je gesleepte volgorde blijft staan.
-  //
-  // Bestaan er secties, dan blijft de taak binnen zijn eigen sectie. Die kopjes
-  // zijn een bewuste indeling en daar hoort een prioriteitswijziging een taak
-  // niet uit te trekken. sort_order is double precision, dus er is altijd ruimte
-  // tussen twee buren zonder de rest te hoeven omnummeren.
-  const manualPosFor = (task, allTasks) => {
-    if (!isManual || task?.sortOrder == null) return null;
-
-    const others = allTasks
-      .filter(x => (x.list || "mine") === activeList && x.id !== task.id && x.sortOrder != null)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    if (others.length === 0) return null;
-
-    // Grenzen van de sectie waarin de taak nu staat (geen secties → hele lijst)
-    let lo = -Infinity, hi = Infinity;
-    for (const s of sections) {
-      const so = s.sortOrder ?? 0;
-      if (so <= task.sortOrder && so > lo) lo = so;
-      if (so >  task.sortOrder && so < hi) hi = so;
-    }
-    const pool = others.filter(x => x.sortOrder > lo && x.sortOrder < hi);
-    if (pool.length === 0) return null;
-
-    // Eerste buur waar deze taak vóór hoort volgens de automatische sortering
-    const idx = pool.findIndex(x => compareTasks(task, x, task.priority, x.priority) < 0);
-    const prev = idx === -1 ? pool[pool.length - 1] : (idx === 0 ? null : pool[idx - 1]);
-    const next = idx === -1 ? null : pool[idx];
-
-    let pos;
-    if (prev && next)      pos = (prev.sortOrder + next.sortOrder) / 2;
-    else if (next)         pos = Number.isFinite(lo) ? (lo + next.sortOrder) / 2 : next.sortOrder - 1;
-    else if (prev)         pos = Number.isFinite(hi) ? (prev.sortOrder + hi) / 2 : prev.sortOrder + 1;
-    else                   return null;
-
-    return pos === task.sortOrder ? null : pos;
-  };
-
-  // Geeft een taak zijn nieuwe plek nadat prioriteit, datum of herhaling is
-  // gewijzigd. Leest de verse state, omdat dit ook vanuit een timer loopt.
-  const releaseManualPos = (id) => {
-    setTasks(ts => {
-      const task = ts.find(x => x.id === id);
-      const pos = task ? manualPosFor(task, ts) : null;
-      if (pos == null) return ts;
-      updateTaskOrderDB([{ id, sortOrder: pos }]);
-      return ts.map(x => x.id === id ? { ...x, sortOrder: pos } : x);
-    });
-  };
-
-  const moveRowTo = (dragId, to) => {
-    const moving = rows.find(r => r.id === dragId);
-    if (!moving) return;
-    const rest = rows.filter(r => r.id !== dragId);
-    rest.splice(to, 0, moving);
-    applyOrder(rest);
-  };
-  const rowSort = useSortable(rows.map(r => r.id), moveRowTo);
-
-  const addSection = () => {
-    const sec = { id: "sec_" + crypto.randomUUID(), title: t(lang, "newSection"), color: SECTION_COLORS.includes(activeListObj?.color) ? activeListObj.color : SECTION_COLORS[0] };
-    applyOrder([...rows, { kind: "section", id: sec.id, section: sec }]);
-    setEditingSectionId(sec.id);
-    setSectionValue(sec.title);
-  };
-  const commitSection = (id) => {
-    const title = sectionValue.trim();
-    if (title) saveSections(sections.map(x => x.id === id ? { ...x, title } : x));
-    setEditingSectionId(null);
-  };
-  const setSectionColor = (id, color) => saveSections(sections.map(x => x.id === id ? { ...x, color } : x));
-  const deleteSection = (id) => saveSections(sections.filter(x => x.id !== id));
+  const rows = sorted.map(task => ({ kind: "task", id: task.id, task }));
 
   const moveListTo = (dragId, to) => {
     const moving = lists.find(l => l.id === dragId);
@@ -620,9 +504,6 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
           };
           updateTaskDB(updated);
           setTasks(t => t.map(x => x.id === id ? updated : x));
-          // De deadline is opgeschoven, dus deze taak hoort nu op een andere
-          // plek te staan: hij zakt onder de taken die eerder spelen.
-          releaseManualPos(id);
         } else {
           const completedAt = new Date().toISOString();
           trashTaskDB(id); // zacht verwijderen: blijft in Supabase met deleted_at
@@ -652,16 +533,7 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
   const addTask = () => {
     if (!newTitle.trim()) return;
     const taskData = { title: newTitle.trim(), priority: "", status: "", deadline: null, list: activeList };
-    // In een handmatig geordende lijst komt een nieuwe taak onderaan
-    const manualPos = isManual ? rows.length : null;
-    addTaskDB(userId, taskData).then(saved => {
-      if (manualPos != null && saved?.id) {
-        setTasks(t => [...t, { ...saved, sortOrder: manualPos }]);
-        updateTaskOrderDB([{ id: saved.id, sortOrder: manualPos }]);
-      } else {
-        setTasks(t => [...t, saved]);
-      }
-    });
+    addTaskDB(userId, taskData).then(saved => setTasks(t => [...t, saved]));
     setNewTitle(""); setAdding(false);
   };
   const cyclePrio = (id) => {
@@ -687,10 +559,6 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
         setFrozenPrio(f => { const n = { ...f }; delete n[id]; return n; });
         setPrioSettling(s => { const n = { ...s }; delete n[id]; return n; });
         delete prioTimers.current[id];
-        // In een handmatig geordende lijst bepaalt sort_order de plek, dus daar
-        // schuift het vrijgeven van de prioriteit niets op. Die taak krijgt hier
-        // zijn nieuwe plek, op hetzelfde moment als de rest.
-        releaseManualPos(id);
       }, 450);
     }, 2500);
   };
@@ -921,51 +789,13 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
         ) : (
           /* NORMAL TASK VIEW */
           <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
-            <div ref={rowSort.containerRef} style={{ minWidth:TABLE_MIN, position:"relative" }}>
-              {rowSort.placeholder}
+            <div style={{ minWidth:TABLE_MIN, position:"relative" }}>
               <div data-sticky-header style={{ display:"flex", alignItems:"stretch", borderBottom:"2px solid #e5e5ea", background:"#f5f5f7", position:"sticky", top:0, zIndex:5 }}>
                 <div style={{ flex:1, minWidth:COL.name+41, fontSize:12, fontWeight:600, color:"#6e6e73", letterSpacing:0.4, padding:"6px 10px", ...cb, background:"#f5f5f7" }}>{t(lang, 'colName')}</div>
                 <div style={{ width:COL.date, flexShrink:0, fontSize:12, fontWeight:600, color:"#6e6e73", letterSpacing:0.4, padding:"6px 10px", ...cb, background:"#f5f5f7" }}>{t(lang, 'colDeadline')}</div>
                 <div style={{ width:COL.prio, flexShrink:0, fontSize:12, fontWeight:600, color:"#6e6e73", letterSpacing:0.4, padding:"6px 10px", textAlign:"center", background:"#f5f5f7" }}>{t(lang, 'colPriority')}</div>
               </div>
               {rows.map(row => {
-                if (row.kind === "section") {
-                  const sec = row.section;
-                  const c = SECTION_COLORS.includes(sec.color) ? sec.color : SECTION_COLORS[0];
-                  const fg = c === "#E6B400" ? "#1d1d1f" : "#fff"; // zwarte tekst op geel
-                  return (
-                    <div key={sec.id} className="jmp-row jmp-section" {...rowSort.itemProps(sec.id, editingSectionId !== sec.id)}
-                      style={{ display:"flex", alignItems:"center", gap:8, marginTop:14, padding:"6px 8px 6px 41px", minHeight:36, boxSizing:"border-box", position:"relative", background:c, color:fg, cursor:"grab", ...rowSort.itemStyle(sec.id, c) }}>
-                      <span className="jmp-grip" title={t(lang, 'dragToReorder')} style={{ position:"absolute", left:3, top:"50%", transform:"translateY(-50%)", color:fg, opacity:0.85 }}>⠿</span>
-                      {editingSectionId === sec.id ? (
-                        <input value={sectionValue} autoFocus onChange={e => setSectionValue(e.target.value)}
-                          onFocus={e => e.currentTarget.select()}
-                          onBlur={() => commitSection(sec.id)}
-                          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setSectionValue(sec.title); setEditingSectionId(null); } }}
-                          style={{ flex:1, minWidth:0, border:"none", borderBottom:"2px solid "+fg, background:"transparent", outline:"none", fontFamily:'var(--font-sans)', fontSize:12, fontWeight:600, letterSpacing:0.4, textTransform:"uppercase", color:fg, padding:"1px 0" }} />
-                      ) : (
-                        <span onDoubleClick={() => { setEditingSectionId(sec.id); setSectionValue(sec.title); }} title={t(lang, 'renameSection')}
-                          style={{ flex:1, minWidth:0, fontSize:12, fontWeight:600, letterSpacing:0.4, textTransform:"uppercase", color:fg, userSelect:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                          {sec.title}
-                        </span>
-                      )}
-                      <div className="jmp-section-tools" style={{ display:"flex", alignItems:"center", gap:2 }}>
-                        {SECTION_COLORS.map(col => (
-                          <button key={col} onClick={() => setSectionColor(sec.id, col)} title={t(lang, 'sectionColor')} aria-label={t(lang, 'sectionColor')} aria-pressed={col === c}
-                            style={{ width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", background:"none", border:"none", padding:0, cursor:"pointer" }}>
-                            <span style={{ width:14, height:14, borderRadius:"50%", background:col, boxShadow: col === c ? "0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,0.25)" : "0 0 0 1.5px rgba(255,255,255,0.8)" }} />
-                          </button>
-                        ))}
-                        <button onClick={() => deleteSection(sec.id)} title={t(lang, 'deleteSection')} aria-label={t(lang, 'deleteSection')}
-                          style={{ background:"none", border:"none", color:fg, opacity:0.85, cursor:"pointer", fontSize:13, lineHeight:1, minWidth:28, minHeight:28, borderRadius:8 }}
-                          onMouseEnter={e => e.currentTarget.style.opacity=1}
-                          onMouseLeave={e => e.currentTarget.style.opacity=0.85}>
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
                 const task = row.task;
                 const tk = getTodayKey();
                 const dlColor = !task.deadline ? "#76767b" : task.deadline < tk ? "#DC2626" : task.deadline===tk ? "#2563EB" : "#1d1d1f";
@@ -974,14 +804,12 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
                 const isSettling = prioSettling[task.id];
                 return (
                   <div key={task.id} className={(isFading ? "fading-task " : "") + "jmp-row"}
-                    {...rowSort.itemProps(task.id, !isShared && !isFading && openNoteId !== task.id)}
-                    style={{ borderBottom:"1px solid #f2f2f7", background:"#fff", opacity: isSettling ? 0.25 : 1, transition:"opacity 0.45s cubic-bezier(0.25,0.1,0.25,1)", ...rowSort.itemStyle(task.id, "#fff") }}
+                    style={{ borderBottom:"1px solid #f2f2f7", background:"#fff", opacity: isSettling ? 0.25 : 1, transition:"opacity 0.45s cubic-bezier(0.25,0.1,0.25,1)" }}
                     onMouseEnter={e => { if(!isFading) e.currentTarget.firstChild.style.background="#f5f5f7"; }}
                     onMouseLeave={e => { if(e.currentTarget.firstChild) e.currentTarget.firstChild.style.background="#fff"; }}>
                     <div style={{ display:"flex", alignItems:"center", background:"inherit" }}>
                     <div style={{ width:41, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", alignSelf:"stretch", position:"relative" }}>
                       <span aria-hidden="true" style={{ position:"absolute", right:0, top:3, bottom:3, width:1, background:"#e5e5ea", pointerEvents:"none" }} />
-                      {!isShared && <span className="jmp-grip" title={t(lang, 'dragToReorder')} style={{ position:"absolute", left:3, top:"50%", transform:"translateY(-50%)" }}>⠿</span>}
                       <button onClick={() => !isShared && completeDone(task.id)} style={{ width:15, height:15, borderRadius:"50%", cursor: isShared ? "default" : "pointer", border:"2px solid #d1d1d6", background:"transparent", flexShrink:0 }} />
                     </div>
                     <div onClick={() => { if(!isShared) { const next = openNoteId===task.id ? null : task.id; setOpenNoteId(next); if(next) { setNoteValue(task.note||""); setTitleValue(task.title||""); } } }}
@@ -1014,8 +842,6 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
                               updateTaskDB(u);
                               return u;
                             }));
-                            // Datum of herhaling gewijzigd → weer laten sorteren
-                            releaseManualPos(task.id);
                           }}
                           onClose={() => setDatePickerOpen(null)}
                         />
@@ -1075,11 +901,6 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
                     onMouseEnter={e => { e.currentTarget.style.color=activeColor; e.currentTarget.style.background="#f5f5f7"; }}
                     onMouseLeave={e => { e.currentTarget.style.color="#76767b"; e.currentTarget.style.background="transparent"; }}>
                     {t(lang, 'addTask')}
-                  </div>
-                  <div onClick={addSection} style={{ padding:"7px 14px 8px", fontSize:12, color:"#76767b", cursor:"pointer", whiteSpace:"nowrap" }}
-                    onMouseEnter={e => { e.currentTarget.style.color=activeColor; e.currentTarget.style.background="#f5f5f7"; }}
-                    onMouseLeave={e => { e.currentTarget.style.color="#76767b"; e.currentTarget.style.background="transparent"; }}>
-                    {t(lang, 'addSection')}
                   </div>
                 </div>
               ))}
