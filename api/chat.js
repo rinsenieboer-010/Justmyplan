@@ -1,3 +1,5 @@
+import { withJmpSkill } from '../lib/jmpSkill.js';
+
 const TOOLS = [
   {
     name: "create_event",
@@ -131,9 +133,9 @@ export default async function handler(req, res) {
 
 Vandaag is het: ${today}
 
-GEDRAGSREGEL — je gebruikt ALTIJD een tool, zonder uitzondering:
+GEDRAGSREGEL:
 - Gebruiker vraagt een actie (taak/afspraak aanmaken of wijzigen)? → gebruik de actie-tool direct
-- Gebruiker stelt een vraag of voert gesprek? → gebruik no_action met je antwoord
+- Gebruiker stelt een vraag of voert gesprek? → antwoord gewoon als tekst, geen tool nodig
 - Meerdere taken wijzigen op basis van een woord in de naam? → gebruik filter_and_update_tasks met het zoekwoord
 - Eén specifieke taak wijzigen? → gebruik update_task met de task_id
 - Eén taak of afspraak verwijderen? → gebruik delete_task (task_id) of delete_event (event_id)
@@ -176,7 +178,7 @@ Regels:
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 8192,
-          system: systemPrompt,
+          system: withJmpSkill(systemPrompt),
           tools: TOOLS,
           messages: apiMessages
         })

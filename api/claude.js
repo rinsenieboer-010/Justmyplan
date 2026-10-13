@@ -2,6 +2,8 @@
 // endpoint i.p.v. rechtstreeks Anthropic, zodat de API-key alleen server-side
 // leeft en niet meegebundeld wordt in de app. De app houdt zijn eigen tool-loop;
 // dit endpoint geeft het Anthropic-antwoord 1-op-1 door.
+import { withJmpSkill } from '../lib/jmpSkill.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -23,7 +25,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: model || 'claude-sonnet-4-6',
         max_tokens: max_tokens || 8192,
-        ...(system && { system }),
+        // De ingebouwde JMP-skill gaat altijd mee, zodat de telefoon-agent dezelfde kennis heeft als het web
+        system: withJmpSkill(system),
         ...(tools && { tools }),
         ...(tool_choice && { tool_choice }),
         messages,
