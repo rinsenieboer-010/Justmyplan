@@ -635,6 +635,11 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
         @media (hover: none) { .jmp-section-tools { opacity: 1; } }
         @media (hover: none) { .jmp-grip { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .jmp-grip { transition: none; } }
+        .jmp-fab { position:absolute; right:20px; bottom:24px; width:56px; height:56px; border-radius:50%; border:none; background:#2563EB; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(37,99,235,0.4); z-index:30; transition:transform 150ms ease, background 150ms ease, box-shadow 150ms ease; }
+        .jmp-fab:hover { background:#1d4ed8; transform:translateY(-1px); box-shadow:0 6px 16px rgba(37,99,235,0.45); }
+        .jmp-fab:active { transform:scale(0.95); }
+        .jmp-fab:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
+        @media (prefers-reduced-motion: reduce) { .jmp-fab { transition:none; } .jmp-fab:hover, .jmp-fab:active { transform:none; } }
       `}</style>
 
       {/* Sidebar */}
@@ -707,7 +712,7 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
       </div>
 
       {/* Table */}
-      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }} onClick={() => setDatePickerOpen(null)}>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, position:"relative" }} onClick={() => setDatePickerOpen(null)}>
         <div style={{ padding:"14px 16px 10px", borderBottom:"1px solid #e5e5ea", flexShrink:0, display:"flex", alignItems:"center", gap:10, position:"relative" }}>
           {isTrash ? <span style={{ fontSize:16 }}>🗑</span> : (
             <div style={{ position:"relative" }}>
@@ -906,6 +911,14 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
               ))}
             </div>
           </div>
+        )}
+
+        {/* Blauwe + knop rechtsonder, net als in de telefoon-app */}
+        {panelWidth > 120 && (
+          <button className="jmp-fab" aria-label={t(lang, 'addTask')} title={t(lang, 'addTask')}
+            onClick={e => { e.stopPropagation(); if (isTrash || isShared) setActiveList("mine"); setAdding(true); }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
         )}
       </div>
     </div>
