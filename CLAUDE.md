@@ -18,6 +18,11 @@ justmyplan is een React productiviteitsapp met drie panelen: Taken (links), Agen
 - `agent-run.js` — agent-bericht uitvoeren (per-user agents uit de `agents`-tabel)
 - `data.js` — externe API met `jmp_` API-key (Authorization: Bearer): taken/events lezen + schrijven
 - `notify.js` — notificaties van agents naar Rinse
+- `lib/jmpSkill.js` — ingebouwde JMP-skill: vaste kennis voor de AI-assistent, gaat automatisch mee in `chat.js` (web) en `claude.js` (telefoon). Pas deze aan als de app of de AI-tools veranderen.
+
+## PWA
+- Installeerbaar via Chrome: `public/manifest.webmanifest`, `public/sw.js` (alleen in productie geregistreerd), iconen in `public/icons/`.
+- Blauwe + knop rechtsonder in het takenpaneel (`.jmp-fab`), net als in de telefoon-app.
 
 ## Mobiele app (aparte repo)
 - Repo: `C:\Users\RJNie\Documents\justmyplan-tel` (Expo / React Native)
