@@ -14,6 +14,16 @@ function parseTime(s, def) {
   return { h: Number.isFinite(h) ? h : def.h, m: Number.isFinite(m) ? m : def.m };
 }
 
+// Agent-label: los veld, of als "[label] Titel" aan het begin van de titel.
+// Het label wordt een grijs blokje onder de taaknaam; de titel blijft schoon.
+function splitLabel(title, label) {
+  let t = typeof title === 'string' ? title.trim() : title;
+  let l = typeof label === 'string' ? label.trim() : null;
+  const m = typeof t === 'string' ? t.match(/^\[([^\]]{1,40})\]\s*(.+)$/) : null;
+  if (m) { t = m[2].trim(); if (!l) l = m[1].trim(); }
+  return { title: t, label: l || null };
+}
+
 // ── Lezen: volledige export ────────────────────────────────────────────────────
 async function readAll(uid) {
   const [{ data: tasks }, { data: events }, { data: lists }] = await Promise.all([
@@ -24,7 +34,7 @@ async function readAll(uid) {
   return {
     exported_at: new Date().toISOString(),
     tasks: (tasks || []).map(t => ({
-      id: t.id, title: t.title, deadline: t.deadline, priority: t.priority,
+      id: t.id, title: t.title, label: t.label || null, deadline: t.deadline, priority: t.priority,
       status: t.status, list: t.list_id, note: t.note,
     })),
     events: (events || []).map(e => ({
@@ -44,8 +54,9 @@ async function runAction(uid, act) {
       case 'create_task': {
         const t = act.task || act;
         if (!t.title) return { action, ok: false, error: 'title verplicht' };
+        const sl = splitLabel(t.title, t.label);
         const { data, error } = await supabase.from('tasks').insert({
-          user_id: uid, title: t.title, deadline: t.deadline || null,
+          user_id: uid, title: sl.title, label: sl.label, deadline: t.deadline || null,
           priority: t.priority || null, status: t.status || null,
           list_id: t.list || t.list_id || 'mine', note: t.note || null,
         }).select('id').single();
@@ -57,6 +68,11 @@ async function runAction(uid, act) {
         const f = act.fields || act.task || act;
         const patch = {};
         for (const k of ['title', 'deadline', 'priority', 'status', 'note']) if (k in f) patch[k] = f[k];
+        if ('title' in f || 'label' in f) {
+          const sl = splitLabel(f.title, f.label);
+          if ('title' in f) patch.title = sl.title;
+          if (sl.label || 'label' in f) patch.label = sl.label;
+        }
         if ('list' in f) patch.list_id = f.list;
         if ('list_id' in f) patch.list_id = f.list_id;
         const { error } = await supabase.from('tasks').update(patch).eq('id', id).eq('user_id', uid);

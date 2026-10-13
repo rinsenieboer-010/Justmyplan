@@ -79,6 +79,8 @@ function dbToTask(r) {
     recurrence:      r.recurrence || null,
     lastCompletedAt: r.last_completed_at || null,
     sortOrder:       r.sort_order ?? null,
+    // Label van een agent (bijv. "klantportaal"); alleen agents kunnen dit zetten
+    label:           r.label || null,
   };
 }
 
