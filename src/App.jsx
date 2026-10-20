@@ -635,7 +635,7 @@ function TaskPanel({ tasks, setTasks, trash, setTrash, lists, setLists, sharedLi
         @media (hover: none) { .jmp-section-tools { opacity: 1; } }
         @media (hover: none) { .jmp-grip { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .jmp-grip { transition: none; } }
-        .jmp-label { display:inline-block; max-width:100%; background:#f5f5f7; color:#6e6e73; font-size:11px; font-weight:600; line-height:1.4; padding:1px 7px; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .jmp-label { display:inline-block; min-width:58px; max-width:110px; text-align:center; box-sizing:border-box; background:#f5f5f7; color:#6e6e73; font-size:11px; font-weight:600; line-height:1.4; padding:1px 7px; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .jmp-fab { position:absolute; right:20px; bottom:24px; width:56px; height:56px; border-radius:50%; border:none; background:#2563EB; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(37,99,235,0.4); z-index:30; transition:transform 150ms ease, background 150ms ease, box-shadow 150ms ease; }
         .jmp-fab:hover { background:#1d4ed8; transform:translateY(-1px); box-shadow:0 6px 16px rgba(37,99,235,0.45); }
         .jmp-fab:active { transform:scale(0.95); }

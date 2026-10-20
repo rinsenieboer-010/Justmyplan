@@ -15,12 +15,16 @@ function parseTime(s, def) {
 }
 
 // Agent-label: los veld, of als "[label] Titel" aan het begin van de titel.
-// Het label wordt een grijs blokje onder de taaknaam; de titel blijft schoon.
+// Meerdere tags ("[Bart] [Wes] Titel") worden allemaal weggehaald; alleen de
+// laatste agent (degene die de taak nu heeft) blijft over als label.
 function splitLabel(title, label) {
   let t = typeof title === 'string' ? title.trim() : title;
   let l = typeof label === 'string' ? label.trim() : null;
-  const m = typeof t === 'string' ? t.match(/^\[([^\]]{1,40})\]\s*(.+)$/) : null;
-  if (m) { t = m[2].trim(); if (!l) l = m[1].trim(); }
+  let m;
+  while (typeof t === 'string' && (m = t.match(/^\[([^\]]{1,40})\]\s*(.+)$/))) {
+    t = m[2].trim();
+    if (!label) l = m[1].trim();
+  }
   return { title: t, label: l || null };
 }
 

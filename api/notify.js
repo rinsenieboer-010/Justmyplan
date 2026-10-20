@@ -20,7 +20,8 @@ export default async function handler(req, res) {
     startH, startM,      // voor events
     endH,   endM,        // voor events
     color   = 'blue',    // blue | red | yellow | green | purple
-    agent,               // naam van de agent, wordt als prefix gezet: "[AgentNaam] Titel"
+    agent,               // naam van de agent; wordt het grijze label bij een taak
+    label,               // optioneel: label expliciet zetten (gaat boven agent)
     list_id,             // optioneel: ID van de lijst (alleen voor tasks)
   } = req.body || {};
 
@@ -35,7 +36,14 @@ export default async function handler(req, res) {
   }
 
   const today       = new Date().toISOString().split('T')[0];
-  const finalTitle  = agent ? `[${agent}] ${title}` : title;
+  // Taken: "[Bart] [Wes] Titel" wordt titel "Titel" met label "Wes".
+  // Het label is de laatste agent in de keten (of het expliciete label).
+  let cleanTitle = String(title).trim();
+  let lastTag = null, m;
+  while ((m = cleanTitle.match(/^\[([^\]]{1,40})\]\s*(.+)$/))) { lastTag = m[1].trim(); cleanTitle = m[2].trim(); }
+  const taskLabel  = (typeof label === 'string' && label.trim()) || lastTag || (agent ? String(agent).trim() : null) || null;
+  // Agenda-items hebben geen labelveld: daar blijft één "[Naam]" voor de titel staan
+  const finalTitle = type === 'event' ? (taskLabel ? `[${taskLabel}] ${cleanTitle}` : cleanTitle) : cleanTitle;
   const finalDate   = date || today;
 
   let table, payload;
@@ -62,6 +70,7 @@ export default async function handler(req, res) {
       status:   'open',
       deadline: date || null,
       note,
+      label:    taskLabel,
       ...(list_id ? { list_id } : {}),
     };
   }
