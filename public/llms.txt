@@ -1,0 +1,16 @@
+# Just My Plan
+
+> Just My Plan is a planning app that puts tasks, calendar and an AI assistant in one screen, so you can plan your day without switching between apps.
+
+Made by Rinse Nieboer, Rotterdam. Available as a web app and as an iPhone app in the App Store.
+
+## Features
+- Tasks and lists, with reminders and repeating tasks.
+- Calendar view, including import from Apple and Google calendars on iPhone.
+- AI assistant that creates, moves and reschedules tasks and appointments on request.
+- Sign in with Apple, push notifications.
+
+## Links
+- [Web app](https://justmyplan.com)
+- [Privacy](https://justmyplan.com/privacy.html)
+- [Maker](https://rjnieboer.com)
